@@ -1,0 +1,49 @@
+# Optional bundled ingress: Traefik v3 + Cloudflare Tunnel (token-based).
+# Skip this entire directory if you already run Traefik — just set
+# TRAEFIK_NETWORK in ../.env to your existing network's name.
+#
+# Reads TUNNEL_TOKEN and CF_DNS_API_TOKEN from ../.env:
+#   docker compose --env-file ../.env up -d
+name: family-matrix-ingress
+
+services:
+  traefik:
+    image: docker.io/traefik:v3.7
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      # Let's Encrypt via Cloudflare DNS-01 (works with proxied/tunneled hosts)
+      - --certificatesresolvers.cloudflare.acme.dnschallenge=true
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.cloudflare.acme.storage=/letsencrypt/acme.json
+    environment:
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+    networks:
+      - ingress
+
+  # Token-based (remote-managed) tunnel: hostnames are configured in the
+  # Cloudflare dashboard, not in a local config file. This intentionally
+  # avoids the locally-managed cert.pem/config.yml approach, whose
+  # `tunnel route dns` writes records into whichever zone the cert belongs
+  # to — a classic wrong-zone trap on multi-domain accounts.
+  cloudflared:
+    image: docker.io/cloudflare/cloudflared:latest
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    networks:
+      - ingress
+
+networks:
+  ingress:
+    # The chat stack joins this network; name must match TRAEFIK_NETWORK in ../.env
+    name: family-matrix-ingress

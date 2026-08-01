@@ -1,0 +1,39 @@
+# coturn for legacy Matrix 1:1 calls — rendered by setup.sh.
+# Container has its own LAN IP: ${COTURN_IP}
+# Router forwards required: 3478 tcp+udp, 49152-49252 udp -> ${COTURN_IP}
+# NOTE: external-ip embeds your WAN IP — if it changes (residential lines),
+# re-run ./setup.sh --force and update the ${TURN_HOST} A record.
+use-auth-secret
+static-auth-secret=${TURN_STATIC_SECRET}
+realm=${TURN_HOST}
+listening-port=3478
+external-ip=${WAN_IP}/${COTURN_IP}
+min-port=49152
+max-port=49252
+# hardening (per the synapse coturn guide)
+no-tls
+no-dtls
+no-cli
+no-tcp-relay
+no-multicast-peers
+user-quota=12
+total-quota=1200
+# SSRF guard: never relay into private/reserved space. Also intentionally
+# blocks LAN targets — LAN<->LAN calls use direct host candidates, never TURN.
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=100.64.0.0-100.127.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.0.0.0-192.0.2.255
+denied-peer-ip=192.88.99.0-192.88.99.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=198.18.0.0-198.19.255.255
+denied-peer-ip=198.51.100.0-198.51.100.255
+denied-peer-ip=203.0.113.0-203.0.113.255
+denied-peer-ip=240.0.0.0-255.255.255.255
+# IPv6 reserved ranges (relay is v4-only here, listed defensively)
+denied-peer-ip=::1
+denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff

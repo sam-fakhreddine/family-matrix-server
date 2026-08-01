@@ -1,0 +1,230 @@
+# family-matrix-server — private Matrix homeserver with voice/video and optional WhatsApp bridge.
+# All identity/network values come from .env (copy .env.example, run ./setup.sh).
+# Container names are pinned via `name:` so scripts/docs can reference them.
+name: family-matrix
+
+services:
+  synapse:
+    image: docker.io/matrixdotorg/synapse:v1.157.2
+    # synapse does not retry the database connection — restart on failure
+    restart: unless-stopped
+    # Run as the synapse user directly — no root in the container at all.
+    # ./files is chowned to 991:991 by setup.sh.
+    user: "991:991"
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - SYNAPSE_CONFIG_PATH=/data/homeserver.yaml
+    volumes:
+      - ./files:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    # LAN-only admin API path (public /_synapse is blocked at Traefik below)
+    ports:
+      - "8008:8008"
+    networks:
+      - traefik-net
+      - default
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK}
+
+      # HTTP → HTTPS redirect
+      - traefik.http.routers.synapse-http.entrypoints=web
+      - traefik.http.routers.synapse-http.rule=Host(`${MATRIX_HOST}`)
+      - traefik.http.routers.synapse-http.middlewares=synapse-https-redirect
+      - traefik.http.middlewares.synapse-https-redirect.redirectscheme.scheme=https
+      - traefik.http.middlewares.synapse-https-redirect.redirectscheme.permanent=true
+
+      # HTTPS router
+      - traefik.http.routers.synapse-https.entrypoints=websecure
+      - traefik.http.routers.synapse-https.rule=Host(`${MATRIX_HOST}`)
+      - traefik.http.routers.synapse-https.service=synapse-service
+      - traefik.http.routers.synapse-https.tls=true
+      - traefik.http.routers.synapse-https.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.services.synapse-service.loadbalancer.server.port=8008
+
+      # Block the synapse admin API (/_synapse/*) from the internet.
+      # The allowlist matches no real client, so this router always 403s.
+      # Admin access is LAN-only via http://<LAN_HOST_IP>:8008.
+      - traefik.http.routers.synapse-admin-block.entrypoints=websecure
+      - traefik.http.routers.synapse-admin-block.rule=Host(`${MATRIX_HOST}`) && PathPrefix(`/_synapse`)
+      - traefik.http.routers.synapse-admin-block.priority=1000
+      - traefik.http.routers.synapse-admin-block.tls=true
+      - traefik.http.routers.synapse-admin-block.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.routers.synapse-admin-block.service=synapse-service
+      - traefik.http.routers.synapse-admin-block.middlewares=synapse-admin-deny
+      - traefik.http.middlewares.synapse-admin-deny.ipallowlist.sourcerange=127.0.0.1/32
+
+      # Security headers
+      - traefik.http.middlewares.synapse-headers.headers.sslredirect=true
+      - traefik.http.middlewares.synapse-headers.headers.forceSTSHeader=true
+      - traefik.http.middlewares.synapse-headers.headers.stsincludesubdomains=true
+      - traefik.http.middlewares.synapse-headers.headers.stsseconds=31536000 # 1 year HSTS
+      - traefik.http.routers.synapse-https.middlewares=synapse-headers
+
+  # Admin web panel — LAN-only by design; deliberately NOT exposed via Traefik.
+  # Reach it at http://<LAN_HOST_IP>:8082
+  synapse-admin:
+    image: awesometechnologies/synapse-admin:0.11.4
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "8082:80"
+    volumes:
+      - ./synapse-admin-config.json:/app/config.json:ro
+    networks:
+      - default
+
+  db:
+    image: docker.io/postgres:15.18-alpine
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      # synapse requires a C-locale database
+      # https://element-hq.github.io/synapse/latest/postgres.html#set-up-database
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./schemas:/var/lib/postgresql/data
+
+  # ── VoIP (Element Call / MatrixRTC + legacy TURN) ─────────────────────────
+
+  # LiveKit SFU — all call media. Own LAN IP on macvlan for media (LAN devices
+  # connect at switch speed, no NAT hairpin), plus the traefik network for wss
+  # signaling (signaling rides the tunnel; media never does).
+  livekit:
+    image: docker.io/livekit/livekit-server:v1.13.5
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+    networks:
+      lanvlan:
+        ipv4_address: ${LIVEKIT_IP}
+      traefik-net: {}
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK}
+      - traefik.http.routers.livekit-http.entrypoints=web
+      - traefik.http.routers.livekit-http.rule=Host(`${LIVEKIT_HOST}`)
+      - traefik.http.routers.livekit-http.middlewares=synapse-https-redirect
+      - traefik.http.routers.livekit-https.entrypoints=websecure
+      - traefik.http.routers.livekit-https.rule=Host(`${LIVEKIT_HOST}`)
+      - traefik.http.routers.livekit-https.service=livekit-service
+      - traefik.http.routers.livekit-https.tls=true
+      - traefik.http.routers.livekit-https.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.services.livekit-service.loadbalancer.server.port=7880
+
+  # Mints LiveKit tokens for Matrix users (verifies them against synapse's
+  # openid endpoint). Element Call clients hit https://<RTC_HOST>/sfu/get
+  # traefik network only — lk-jwt is signaling/auth (HTTP), never touches
+  # media, so it needs no lanvlan IP unlike livekit/coturn.
+  lk-jwt:
+    image: ghcr.io/element-hq/lk-jwt-service:0.5.0
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      # returned verbatim to clients — must be the public wss URL
+      - LIVEKIT_URL=wss://${LIVEKIT_HOST}
+      - LIVEKIT_KEY=lkjwt
+      - LIVEKIT_SECRET=${LIVEKIT_API_SECRET}
+      - LIVEKIT_FULL_ACCESS_HOMESERVERS=${MATRIX_HOST}
+    networks:
+      - traefik-net
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK}
+      - traefik.http.routers.lkjwt-http.entrypoints=web
+      - traefik.http.routers.lkjwt-http.rule=Host(`${RTC_HOST}`)
+      - traefik.http.routers.lkjwt-http.middlewares=synapse-https-redirect
+      - traefik.http.routers.lkjwt-https.entrypoints=websecure
+      - traefik.http.routers.lkjwt-https.rule=Host(`${RTC_HOST}`)
+      - traefik.http.routers.lkjwt-https.service=lkjwt-service
+      - traefik.http.routers.lkjwt-https.tls=true
+      - traefik.http.routers.lkjwt-https.tls.certresolver=${CERT_RESOLVER}
+      - traefik.http.services.lkjwt-service.loadbalancer.server.port=8080
+
+  # Legacy 1:1 call TURN relay (Element Web/Desktop only; Element X uses
+  # LiveKit above). Own LAN IP; nothing internal talks to it.
+  coturn:
+    image: docker.io/coturn/coturn:4.16.0-r0-alpine
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    networks:
+      lanvlan:
+        ipv4_address: ${COTURN_IP}
+
+  # ── Optional: WhatsApp bridge (mautrix) ───────────────────────────────────
+  # Enable with: docker compose --profile bridge up -d
+  # Requires one-time config generation first — see OPERATIONS.md.
+  # Each user links their own WhatsApp by DMing @whatsappbot:<MATRIX_HOST>.
+  whatsapp:
+    image: dock.mau.dev/mautrix/whatsapp:latest
+    profiles: ["bridge"]
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./whatsapp:/data
+    networks:
+      - default
+    depends_on:
+      db:
+        condition: service_healthy
+      synapse:
+        condition: service_started
+
+  # ── Optional: dynamic DNS for the TURN record ─────────────────────────────
+  # Residential IPs change; a stale TURN A record silently breaks calls for
+  # remote participants on strict NATs. Enable with:
+  #   docker compose --profile ddns up -d
+  # Reuses CF_DNS_API_TOKEN (zone-scoped DNS:Edit — same token as the ingress
+  # certs). NOTE: after an IP change, also re-run ./setup.sh --force and
+  # restart coturn — its config embeds the WAN IP (see OPERATIONS.md).
+  ddns:
+    image: favonia/cloudflare-ddns:1
+    profiles: ["ddns"]
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - CLOUDFLARE_API_TOKEN=${CF_DNS_API_TOKEN}
+      - DOMAINS=${TURN_HOST}
+      - PROXIED=false
+      - IP6_PROVIDER=none
+      - UPDATE_CRON=@every 5m
+
+networks:
+  # External: created by ingress/ (or your own Traefik stack).
+  traefik-net:
+    external: true
+    name: ${TRAEFIK_NETWORK}
+  # Gives media containers their own IPs on the physical LAN. The block must
+  # be outside your DHCP pool. NOTE: the docker host itself cannot reach
+  # macvlan IPs (kernel isolation) — test from another LAN device.
+  lanvlan:
+    driver: macvlan
+    driver_opts:
+      parent: ${MACVLAN_PARENT}
+    ipam:
+      config:
+        - subnet: ${LAN_SUBNET}
+          gateway: ${LAN_GATEWAY}
+          ip_range: ${MACVLAN_RANGE}

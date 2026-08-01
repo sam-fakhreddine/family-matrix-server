@@ -1,0 +1,28 @@
+# LiveKit SFU for Element Call (MatrixRTC) — rendered by setup.sh.
+# Container LAN IP: ${LIVEKIT_IP}
+# Router forwards required: 7881 tcp, 7882 udp -> ${LIVEKIT_IP}
+port: 7880
+rtc:
+  # Single-port UDP mux: ALL media on one forwarded port. Requires the host
+  # sysctls from host-fixes.sh (LiveKit wants a 16 MiB socket buffer and is
+  # silently capped without them).
+  udp_port: 7882
+  tcp_port: 7881
+  use_external_ip: true            # STUN-discovers the WAN IP
+  advertise_internal_ip: true      # LAN clients get a direct switch-speed path
+  skip_external_ip_validation: true  # self-ping fails behind NAT without hairpin
+  # Only gather/advertise candidates on the macvlan LAN interface. eth0 is
+  # normally the macvlan attach inside the container; if calls fail to
+  # establish, verify with: docker exec family-matrix-livekit-1 cat /proc/net/route
+  interfaces:
+    includes: [eth0]
+room:
+  auto_create: false      # only the call-auth service creates rooms
+# Secret below is a literal copy of LIVEKIT_API_SECRET from .env (this file
+# does not support env expansion). Rotate via ./setup.sh --force.
+keys:
+  lkjwt: "${LIVEKIT_API_SECRET}"
+prometheus:
+  port: 6789
+logging:
+  level: info
