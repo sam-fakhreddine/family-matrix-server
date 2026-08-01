@@ -10,7 +10,6 @@ ingress/traefik-rendered.yml
 
 # Data directories
 schemas/
-whatsapp/
 *.dump
 *.tar.gz
 

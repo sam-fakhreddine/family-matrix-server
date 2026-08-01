@@ -1,7 +1,7 @@
 # Architecture
 
 A private Matrix homeserver for a family or small group: encrypted chat,
-group voice/video (Element Call), optional WhatsApp bridge. Designed as a
+group voice/video (Element Call). Designed as a
 **closed system**: no federation, no public registration, no public admin
 surface. Example values: `matrix.example.com`, LAN `192.168.1.0/24`, media
 container IPs `192.168.1.241`/`.242`.
@@ -12,22 +12,18 @@ container IPs `192.168.1.241`/`.242`.
 flowchart LR
     subgraph People
         FAM["Members<br/>(Element X / Element Web)"]
-        WAC["WhatsApp contacts<br/>(unchanged WhatsApp apps)"]
         ADMIN["Admin<br/>LAN only"]
     end
 
     subgraph External
         CF["Cloudflare<br/>DNS + tunnel edge"]
-        WA["WhatsApp network"]
         RTR["Home router<br/>NAT + 4 port forwards"]
     end
 
-    STACK["family-matrix-server<br/>Matrix homeserver + VoIP + bridge"]
+    STACK["family-matrix-server<br/>Matrix homeserver + VoIP"]
 
     FAM -- "HTTPS/WSS: chat + call signaling" --> CF --> STACK
     FAM -- "UDP/TCP: call media (WebRTC)" --> RTR --> STACK
-    WAC <-- "messages" --> WA
-    STACK -- "outbound bridge connection" --> WA
     ADMIN -- "http :8008 / :8082 (LAN)" --> STACK
 ```
 
@@ -47,7 +43,6 @@ Trust boundaries:
 flowchart TB
     subgraph Internet
         CLIENT["Matrix clients"]
-        WANET["WhatsApp"]
     end
 
     subgraph Edge["ingress stack (bundled or BYO)"]
@@ -56,13 +51,12 @@ flowchart TB
     end
 
     subgraph family-matrix-server["family-matrix-server compose stack"]
-        SYN["synapse v1.155<br/>runs as uid 991<br/>:8008"]
-        DB[("postgres 18<br/>synapse + mautrix_whatsapp")]
+        SYN["synapse v1.157<br/>runs as uid 991<br/>:8008"]
+        DB[("postgres 18<br/>synapse db")]
         ADM["synapse-admin v0.11.4<br/>:8082 LAN only"]
         LKJ["lk-jwt v0.5<br/>:8080"]
         LK["livekit v1.13.5<br/>macvlan LIVEKIT_IP<br/>ws :7880, media udp :7882 / tcp :7881"]
         COT["coturn 4.16<br/>macvlan COTURN_IP<br/>:3478, relay udp 49152-49252"]
-        WAB["mautrix-whatsapp<br/>(optional profile)"]
     end
 
     CLIENT -- "MATRIX_HOST (client API)" --> CFD --> TRAEFIK
@@ -72,9 +66,6 @@ flowchart TB
     CLIENT -- "media: udp 7882 (fwd)" --> LK
     CLIENT -- "legacy TURN: 3478 (fwd)" --> COT
     SYN --- DB
-    WAB --- DB
-    WAB <-- "appservice API" --> SYN
-    WAB -- "outbound" --> WANET
     LKJ -- "verify token via openid endpoint<br/>(hairpins through Cloudflare)" --> SYN
     LKJ -- "CreateRoom API (public wss URL)" --> LK
     ADM -- "admin API :8008 (LAN browser)" --> SYN
@@ -84,7 +75,7 @@ flowchart TB
 
 | Network | Members | Purpose |
 |---|---|---|
-| stack-internal bridge | synapse, db, synapse-admin, whatsapp | internal service traffic |
+| stack-internal bridge | synapse, db, synapse-admin | internal service traffic |
 | `TRAEFIK_NETWORK` (external) | synapse, lk-jwt, livekit | ingress from traefik/cloudflared |
 | `lanvlan` (macvlan on `MACVLAN_PARENT`) | coturn, livekit | dedicated LAN IPs for media. **The docker host cannot reach these IPs** (kernel isolation) — test from another LAN device. livekit is dual-homed (macvlan for media + traefik network for signaling). |
 
@@ -95,9 +86,8 @@ at the macvlan IPs directly.
 ### Data
 
 - `files/` — synapse config, signing key, media (uid 991). `schemas/` —
-  postgres (uid 70). `whatsapp/` — bridge config + registration.
-- The `synapse` database is auto-created by postgres env vars; the
-  `mautrix_whatsapp` database is created by `setup.sh`.
+  postgres (uid 70).
+- The `synapse` database is auto-created by postgres env vars.
 - Secrets originate in `.env`; several are rendered as literals into configs
   (see OPERATIONS.md rotation notes).
 

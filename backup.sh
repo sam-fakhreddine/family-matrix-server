@@ -22,12 +22,6 @@ docker exec family-matrix-db-1 pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -F 
 docker cp -q family-matrix-db-1:/tmp/synapse-backup.dump "$BACKUP_DIR/synapse-$TS.dump"  # -q: quiet for clean cron logs
 docker exec family-matrix-db-1 rm -f /tmp/synapse-backup.dump
 
-# Bridge database too, if the whatsapp profile is in use
-if docker ps --format '{{.Names}}' | grep -q '^family-matrix-whatsapp-1$'; then
-  docker exec family-matrix-db-1 pg_dump -U "$POSTGRES_USER" -d mautrix_whatsapp -F c -f /tmp/bridge-backup.dump
-  docker cp -q family-matrix-db-1:/tmp/bridge-backup.dump "$BACKUP_DIR/bridge-$TS.dump"
-  docker exec family-matrix-db-1 rm -f /tmp/bridge-backup.dump
-fi
 
 tar czf "$BACKUP_DIR/media-$TS.tar.gz" -C ./files media_store
 

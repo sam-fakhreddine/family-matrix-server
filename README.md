@@ -1,11 +1,10 @@
 # family-matrix-server
 
 A self-hosted, **private-by-design** chat server for a family or small group:
-end-to-end-encrypted messaging, group voice/video calls, and an optional
-WhatsApp bridge — built on [Matrix Synapse](https://github.com/element-hq/synapse),
+end-to-end-encrypted messaging and group voice/video calls — built on
+[Matrix Synapse](https://github.com/element-hq/synapse) and
 [Element Call](https://github.com/element-hq/element-call)/[LiveKit](https://livekit.io),
-and [mautrix-whatsapp](https://github.com/mautrix/whatsapp), deployed with
-docker compose.
+deployed with docker compose.
 
 Users connect with the standard [Element](https://element.io) apps (iOS,
 Android, web, desktop). Nothing custom to install on phones.
@@ -49,7 +48,7 @@ real ceiling, not CPU.
 | Example | Pi 5 (4 GB) + NVMe, or 2 vCPU/4 GB VPS | N100/N305 mini PC, 16 GB | 6–8-core desktop, 32 GB |
 | Disk (SSD) | 64–128 GB | 256–512 GB | 1–2 TB |
 | Uplink | 15–20 Mbps | 30–50 Mbps | 100+ Mbps |
-| Handles | 5 users, 1:1 + small calls | 5–10 users, regular 5–8-person calls, bridge | 25+ users, parallel calls, years of media |
+| Handles | 5 users, 1:1 + small calls | 5–10 users, regular 5–8-person calls | 25+ users, parallel calls, years of media |
 
 Rules of thumb: each camera-on participant uploads ~2.4 Mbps to the server;
 a 5-person call with remote members costs the server ~12–18 Mbps of egress
@@ -76,7 +75,7 @@ user, and sign in from Element. Full walkthrough: **[SETUP.md](SETUP.md)**.
 | Doc | What's in it |
 |---|---|
 | [SETUP.md](SETUP.md) | Step-by-step first deployment |
-| [OPERATIONS.md](OPERATIONS.md) | Day-2: users, backups/restore, WhatsApp bridge, troubleshooting |
+| [OPERATIONS.md](OPERATIONS.md) | Day-2: users, backups/restore, troubleshooting |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Diagrams, network design, and the reasoning behind the decisions |
 | [ingress/README.md](ingress/README.md) | Bundled Traefik + Cloudflare Tunnel setup |
 

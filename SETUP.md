@@ -138,6 +138,6 @@ issues are the TURN A-record being proxied (grey-cloud it), a forward
 pointing at the docker host instead of the container IPs, and local-DNS
 negative caching.
 
-## 9. Optional: WhatsApp bridge and backups
+## 9. Backups
 
-Both covered in [OPERATIONS.md](OPERATIONS.md).
+Covered in [OPERATIONS.md](OPERATIONS.md).

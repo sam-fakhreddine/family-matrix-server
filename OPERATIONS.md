@@ -7,7 +7,7 @@ media IPs `192.168.1.241`/`.242`.
 
 ```bash
 docker compose up -d                    # start/reconcile the stack
-docker compose logs -f synapse|livekit|coturn|whatsapp
+docker compose logs -f synapse|livekit|coturn
 
 # Create a user (interactive; answer admin y/n)
 docker exec -it family-matrix-synapse-1 register_new_matrix_user -c /data/homeserver.yaml http://localhost:8008
@@ -28,7 +28,6 @@ u=$(( $(date +%s) + 3600 )); p=$(printf '%s' "$u" | openssl dgst -sha1 -hmac "$T
 | `schemas/` | uid 70 | Postgres data. Never touch. |
 | `coturn/turnserver.conf` | you | Embeds your **WAN IP** — re-render on IP change and update the TURN A record. |
 | `livekit/livekit.yaml` | you | `interfaces.includes: [eth0]` assumes the macvlan attach is eth0 in-container; verify with `docker exec family-matrix-livekit-1 cat /proc/net/route` if calls won't establish. |
-| `whatsapp/` | root/you | Bridge config + registration; contains tokens. |
 
 **Rotating a secret** = edit it in `.env` (or blank it and let setup regenerate)
 → `./setup.sh --force` → restart the services that consume it. Note rotating
@@ -37,7 +36,7 @@ u=$(( $(date +%s) + 3600 )); p=$(printf '%s' "$u" | openssl dgst -sha1 -hmac "$T
 ## Backups and restore
 
 ```bash
-./backup.sh     # pg_dump(s) + media tar → $BACKUP_DIR, 14-day retention
+./backup.sh     # pg_dump + media tar → $BACKUP_DIR, 14-day retention
 # cron: 30 3 * * * /path/to/family-matrix-server/backup.sh >> /path/to/family-matrix-server/backup.log 2>&1
 ```
 
@@ -56,36 +55,6 @@ tar xzf "$BACKUP_DIR/media-YYYY-MM-DD.tar.gz" -C ./files/
 docker run --rm -v ./files:/f alpine chown -R 991:991 /f
 docker compose start synapse
 ```
-
-## WhatsApp bridge (optional)
-
-One-time setup:
-
-```bash
-# 1. Generate the example config
-docker compose --profile bridge run --rm whatsapp
-# 2. Edit whatsapp/config.yaml:
-#    homeserver.address: http://synapse:8008        domain: <MATRIX_HOST>
-#    appservice.address: http://whatsapp:29318      hostname: 0.0.0.0
-#    database.uri: postgres://synapse:<POSTGRES_PASSWORD>@db/mautrix_whatsapp?sslmode=disable
-#    permissions: your domain -> user, your admin mxid -> admin
-#    encryption: allow: true, default: true         matrix.federate_rooms: false
-# 3. Generate the registration
-docker compose --profile bridge run --rm whatsapp
-# 4. Install it for synapse (files/ is uid 991):
-docker run --rm -v ./whatsapp:/w -v ./files:/f alpine sh -c \
-  'cp /w/registration.yaml /f/whatsapp-registration.yaml && chown 991:991 /f/whatsapp-registration.yaml && chmod 600 /f/whatsapp-registration.yaml'
-# 5. Append to files/homeserver.yaml (via alpine, see gotchas):
-#      app_service_config_files:
-#        - /data/whatsapp-registration.yaml
-docker compose restart synapse && docker compose --profile bridge up -d
-```
-
-Linking: each user DMs `@whatsappbot:matrix.example.com` and sends `login qr`
-(scan from WhatsApp → Linked Devices) or `login phone` for an 8-character
-pairing code — no camera gymnastics, best for remote family. Each account
-uses one of that user's 4 WhatsApp linked-device slots; the phone must come
-online at least every ~14 days to keep the link.
 
 ## Troubleshooting
 
@@ -109,7 +78,7 @@ online at least every ~14 days to keep the link.
   the alpine-edit pattern above if disk pressure appears.
 - Small-RAM hosts (4 GB): add `SYNAPSE_CACHE_FACTOR=0.25` to the synapse
   service environment, and consider compose memory limits (synapse 1g,
-  postgres 1g, livekit 512m, bridge 384m, everything else ≤256m — the stack
+  postgres 1g, livekit 512m, everything else ≤256m — the stack
   idles around 2–2.5 GB resident).
 - CPU is effectively never the bottleneck at family scale — an 8-person
   call is ~56 forwarded tracks and LiveKit handles ~1,600 tracks/core on

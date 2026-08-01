@@ -1,4 +1,4 @@
-# family-matrix-server — private Matrix homeserver with voice/video and optional WhatsApp bridge.
+# family-matrix-server — private Matrix homeserver with voice/video calls.
 # All identity/network values come from .env (copy .env.example, run ./setup.sh).
 # Container names are pinned via `name:` so scripts/docs can reference them.
 name: family-matrix
@@ -170,26 +170,6 @@ services:
     networks:
       lanvlan:
         ipv4_address: ${COTURN_IP}
-
-  # ── Optional: WhatsApp bridge (mautrix) ───────────────────────────────────
-  # Enable with: docker compose --profile bridge up -d
-  # Requires one-time config generation first — see OPERATIONS.md.
-  # Each user links their own WhatsApp by DMing @whatsappbot:<MATRIX_HOST>.
-  whatsapp:
-    image: dock.mau.dev/mautrix/whatsapp:latest
-    profiles: ["bridge"]
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    volumes:
-      - ./whatsapp:/data
-    networks:
-      - default
-    depends_on:
-      db:
-        condition: service_healthy
-      synapse:
-        condition: service_started
 
   # ── Optional: dynamic DNS for the TURN record ─────────────────────────────
   # Residential IPs change; a stale TURN A record silently breaks calls for

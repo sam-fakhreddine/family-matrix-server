@@ -57,7 +57,7 @@ done
 set -a; . ./.env; set +a
 
 # ── 4. Directories ──────────────────────────────────────────────────────────
-mkdir -p files coturn livekit whatsapp schemas
+mkdir -p files coturn livekit schemas
 
 # ── 5. Synapse signing key (once, via synapse's own generator) ──────────────
 if [ ! -f "files/${MATRIX_HOST}.signing.key" ]; then
@@ -105,17 +105,13 @@ if ! docker network inspect "${TRAEFIK_NETWORK}" >/dev/null 2>&1; then
 fi
 
 # ── 8. Database bootstrap ───────────────────────────────────────────────────
-say "Starting postgres and creating databases"
+say "Starting postgres"
 docker compose up -d db
 for i in $(seq 1 30); do
   docker compose ps db --format '{{.Health}}' 2>/dev/null | grep -q healthy && break
   [ "$i" -eq 30 ] && die "postgres did not become healthy in 60s — check: docker compose logs db"
   sleep 2
 done
-docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -tc \
-  "SELECT 1 FROM pg_database WHERE datname='mautrix_whatsapp'" | grep -q 1 || \
-  docker compose exec -T db psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c \
-    "CREATE DATABASE mautrix_whatsapp OWNER ${POSTGRES_USER};"
 
 # ── 9. Checklist ────────────────────────────────────────────────────────────
 say "Setup complete. Remaining manual steps:"
@@ -148,5 +144,5 @@ cat <<CHECKLIST
     docker exec -it family-matrix-synapse-1 register_new_matrix_user -c /data/homeserver.yaml http://localhost:8008
 
   Then sign in from any Element client with homeserver: ${MATRIX_HOST}
-  Optional WhatsApp bridge + backups: see OPERATIONS.md
+  Backups: see OPERATIONS.md
 CHECKLIST
