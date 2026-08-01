@@ -57,7 +57,7 @@ flowchart TB
 
     subgraph family-matrix-server["family-matrix-server compose stack"]
         SYN["synapse v1.155<br/>runs as uid 991<br/>:8008"]
-        DB[("postgres 15<br/>synapse + mautrix_whatsapp")]
+        DB[("postgres 18<br/>synapse + mautrix_whatsapp")]
         ADM["synapse-admin v0.11.4<br/>:8082 LAN only"]
         LKJ["lk-jwt v0.5<br/>:8080"]
         LK["livekit v1.13.5<br/>macvlan LIVEKIT_IP<br/>ws :7880, media udp :7882 / tcp :7881"]
