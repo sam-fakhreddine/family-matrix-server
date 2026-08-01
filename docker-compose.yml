@@ -79,7 +79,7 @@ services:
       - default
 
   db:
-    image: docker.io/postgres:15.18-alpine
+    image: docker.io/postgres:18.4-alpine
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
