@@ -9,22 +9,32 @@ container IPs `192.168.1.241`/`.242`.
 ## System Context
 
 ```mermaid
-flowchart LR
-    subgraph People
-        FAM["Members<br/>(Element X / Element Web)"]
-        ADMIN["Admin<br/>LAN only"]
-    end
+flowchart TD
+    %% ── Tier 1: people ──────────────────────────────────
+    Members["👤 Members<br/>Element apps — iOS / Android / web"]
+    Admin["🔧 Admin<br/>LAN only"]
 
-    subgraph External
-        CF["Cloudflare<br/>DNS + tunnel edge"]
-        RTR["Home router<br/>NAT + 4 port forwards"]
-    end
+    %% ── Tier 2: network edges ───────────────────────────
+    Cloudflare["☁️ Cloudflare<br/>DNS + tunnel edge"]
+    Router["🌐 Home Router<br/>NAT + 4 media port-forwards"]
 
-    STACK["family-matrix-server<br/>Matrix homeserver + VoIP"]
+    %% ── Tier 3: the system ──────────────────────────────
+    Stack["🏠 family-matrix-server<br/>Matrix homeserver + VoIP"]
 
-    FAM -- "HTTPS/WSS: chat + call signaling" --> CF --> STACK
-    FAM -- "UDP/TCP: call media (WebRTC)" --> RTR --> STACK
-    ADMIN -- "http :8008 / :8082 (LAN)" --> STACK
+    %% chat + signaling ride the tunnel; media takes the forwards
+    Members -- "https / wss — chat + call signaling" --> Cloudflare
+    Members -- "udp / tcp — call media" --> Router
+    Cloudflare -- "outbound tunnel" --> Stack
+    Router -- "forwards to container IPs" --> Stack
+    Admin -- "http :8008 / :8082" --> Stack
+
+    classDef person fill:#F0F0F0,stroke:#000000,stroke-width:2px,color:black,padding:8px
+    classDef gateway fill:#a5d8ff,stroke:#1971c2,stroke-width:2px,color:darkblue
+    classDef system fill:#d0bfff,stroke:#7048e8,stroke-width:2px,color:darkblue
+
+    class Members,Admin person
+    class Cloudflare,Router gateway
+    class Stack system
 ```
 
 Trust boundaries:
@@ -40,35 +50,54 @@ Trust boundaries:
 ## Container Diagram
 
 ```mermaid
-flowchart TB
-    subgraph Internet
-        CLIENT["Matrix clients"]
+flowchart TD
+    %% ── Tier 1: users ───────────────────────────────────
+    Clients["👤 Matrix Clients<br/>Element / Element X"]
+
+    %% ── Tier 2: ingress (bundled or BYO) ────────────────
+    subgraph Ingress["🌐 ingress stack"]
+        Cloudflared["☁️ cloudflared<br/>token tunnel"]
+        Traefik["🚦 traefik v3<br/>TLS + routing"]
     end
 
-    subgraph Edge["ingress stack (bundled or BYO)"]
-        CFD["cloudflared<br/>(token tunnel)"]
-        TRAEFIK["traefik v3"]
+    %% ── Tiers 3-5: compose stack ────────────────────────
+    subgraph Stack["🏠 family-matrix-server compose stack"]
+        Synapse["⚙️ synapse v1.157<br/>uid 991 · :8008"]
+        LkJwt["🔑 lk-jwt v0.5<br/>call auth · :8080"]
+        LiveKit["📞 livekit v1.13.5<br/>macvlan LIVEKIT_IP<br/>ws :7880 · media udp :7882 / tcp :7881"]
+        Coturn["🔁 coturn 4.16<br/>macvlan COTURN_IP<br/>:3478 · relay udp 49152-49252"]
+        AdminUI["🛠️ synapse-admin<br/>:8082 LAN only"]
+        Postgres[("💾 postgres 18<br/>synapse db")]
     end
 
-    subgraph family-matrix-server["family-matrix-server compose stack"]
-        SYN["synapse v1.157<br/>runs as uid 991<br/>:8008"]
-        DB[("postgres 18<br/>synapse db")]
-        ADM["synapse-admin v0.11.4<br/>:8082 LAN only"]
-        LKJ["lk-jwt v0.5<br/>:8080"]
-        LK["livekit v1.13.5<br/>macvlan LIVEKIT_IP<br/>ws :7880, media udp :7882 / tcp :7881"]
-        COT["coturn 4.16<br/>macvlan COTURN_IP<br/>:3478, relay udp 49152-49252"]
-    end
+    %% signaling + API paths (via tunnel)
+    Clients -- "MATRIX_HOST — client API" --> Cloudflared
+    Cloudflared --> Traefik
+    Traefik --> Synapse
+    Traefik -- "RTC_HOST" --> LkJwt
+    Traefik -- "LIVEKIT_HOST — wss" --> LiveKit
 
-    CLIENT -- "MATRIX_HOST (client API)" --> CFD --> TRAEFIK
-    TRAEFIK --> SYN
-    TRAEFIK -- "RTC_HOST" --> LKJ
-    TRAEFIK -- "LIVEKIT_HOST (wss)" --> LK
-    CLIENT -- "media: udp 7882 (fwd)" --> LK
-    CLIENT -- "legacy TURN: 3478 (fwd)" --> COT
-    SYN --- DB
-    LKJ -- "verify token via openid endpoint<br/>(hairpins through Cloudflare)" --> SYN
-    LKJ -- "CreateRoom API (public wss URL)" --> LK
-    ADM -- "admin API :8008 (LAN browser)" --> SYN
+    %% media bypasses the tunnel entirely (router forwards)
+    Clients -. "media udp 7882" .-> LiveKit
+    Clients -. "legacy TURN 3478" .-> Coturn
+
+    %% internal
+    Synapse --- Postgres
+    LkJwt -- "verify token — openid endpoint<br/>hairpins through Cloudflare" --> Synapse
+    LkJwt -- "CreateRoom — public wss URL" --> LiveKit
+    AdminUI -- "admin API :8008 — LAN browser" --> Synapse
+
+    classDef person fill:#F0F0F0,stroke:#000000,stroke-width:2px,color:black,padding:8px
+    classDef gateway fill:#a5d8ff,stroke:#1971c2,stroke-width:2px,color:darkblue
+    classDef core fill:#ffc9c9,stroke:#e03131,stroke-width:2px,color:darkred
+    classDef service fill:#d0bfff,stroke:#7048e8,stroke-width:2px,color:darkblue
+    classDef data fill:#b2f2bb,stroke:#2f9e44,stroke-width:2px,color:darkgreen
+
+    class Clients person
+    class Cloudflared,Traefik gateway
+    class Synapse core
+    class LkJwt,LiveKit,Coturn,AdminUI service
+    class Postgres data
 ```
 
 ### Networks
