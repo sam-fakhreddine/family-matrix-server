@@ -27,6 +27,7 @@ u=$(( $(date +%s) + 3600 )); p=$(printf '%s' "$u" | openssl dgst -sha1 -hmac "$T
 | `files/` (homeserver.yaml, signing key, media) | **uid 991** | Synapse runs non-root as 991. Edit via `docker run --rm -v ./files:/f alpine sh -c '...'` — never chown the tree to yourself. `homeserver.yaml` is mode 600. |
 | `schemas/` | uid 70 | Postgres data (postgres-18 layout: DB lives in `schemas/18/docker/`). Never touch. |
 | `coturn/turnserver.conf` | **uid 65534** (mode 400) | Embeds `TURN_STATIC_SECRET` + your **WAN IP** — locked to the coturn container's uid. Don't hand-edit: change `.env`, `./setup.sh --force`, restart coturn. Re-render on IP change and update the TURN A record. |
+| `synapse-admin-config.json` | you | Consumed by the **etkecc fork**, which serves from `/var/public` on `:8080` and takes `{"restrictBaseUrl": "..."}`. Mounting it at the old `/app/config.json` path silently serves an empty config (panel loads but won't pin your homeserver). |
 | `livekit/livekit.yaml` | you | Contains **no secrets** (the API key rides the `LIVEKIT_KEYS` env var). `interfaces.includes: [eth0]` assumes the macvlan attach is eth0 in-container; verify with `docker exec family-matrix-livekit-1 cat /proc/net/route` if calls won't establish. |
 
 **Rotating a secret** = edit it in `.env` (or blank it and let setup regenerate)

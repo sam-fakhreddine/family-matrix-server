@@ -14,11 +14,14 @@ Android, web, desktop). Nothing custom to install on phones.
 - **Closed server**: no federation, no public registration, admin plane
   LAN-only, `/_synapse` blocked at the proxy, E2EE on by default. The attack
   surface is the client API plus two narrowly-forwarded media ports.
-- **Least-privilege by default**: every container drops all Linux
-  capabilities it doesn't need, postgres/synapse run as unprivileged uids,
-  postgres has no internet route, admin ports bind to the LAN address only,
-  and Traefik talks to docker through a read-only socket proxy. Details and
-  threat model: [SECURITY.md](SECURITY.md).
+- **Least-privilege by default**: every container runs with
+  `no-new-privileges` and all Linux capabilities dropped (only coturn and
+  Traefik add one back, to bind low ports); synapse and postgres run as their
+  own uids with no in-container root; postgres sits on an internal network
+  with no route to the internet; admin ports bind the LAN address, never
+  `0.0.0.0`; and Traefik reads the docker API through an allowlisted socket
+  proxy instead of mounting `docker.sock`. Threat model and the full
+  inventory: [SECURITY.md](SECURITY.md).
 - **Calls that actually work**: Element Call/LiveKit wired correctly for a
   home network — including the non-obvious parts (the openid exception a
   closed server needs for call auth, single-port UDP media mux, macvlan IPs
@@ -66,14 +69,21 @@ valve. On 4 GB hosts set `SYNAPSE_CACHE_FACTOR=0.25`.
 
 ```bash
 cp .env.example .env      # fill in Identity + Network sections
-./setup.sh                # generates secrets, renders configs, bootstraps DB
+./setup.sh                # generates secrets + configs; stops for the ingress step
 cd ingress && docker compose --env-file ../.env up -d && cd ..   # or BYO Traefik
+./setup.sh                # re-run: now bootstraps the database
 sudo bash host-fixes.sh   # UDP buffers (+ AppArmor patch only if needed)
 docker compose up -d
 ```
 
-Then follow the DNS + router checklist `setup.sh` prints, create your first
-user, and sign in from Element. Full walkthrough: **[SETUP.md](SETUP.md)**.
+`setup.sh` is idempotent and deliberately runs twice: the first pass can't
+create databases until the Traefik network exists. It ends by printing a DNS
+and router-forward checklist filled in with your values. Then create your
+first user and sign in from Element — full walkthrough: **[SETUP.md](SETUP.md)**.
+
+Optional extras: `docker compose --profile ddns up -d` keeps the TURN DNS
+record current on a dynamic residential IP. The admin panel lives at
+`http://<LAN_HOST_IP>:8082` (LAN-only by design, never exposed publicly).
 
 ## Documentation
 
