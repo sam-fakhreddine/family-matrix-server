@@ -18,6 +18,13 @@ no-tcp-relay
 no-multicast-peers
 user-quota=12
 total-quota=1200
+# don't advertise the coturn version to scanners
+no-software-attribute
+# disable RFC5780 NAT-discovery responses — unauthenticated STUN reflection
+# that internet scanners abuse for amplification; clients don't need it
+no-rfc5780
+no-stun-backward-compatibility
+response-origin-only-with-rfc5780
 # SSRF guard: never relay into private/reserved space. Also intentionally
 # blocks LAN targets — LAN<->LAN calls use direct host candidates, never TURN.
 denied-peer-ip=0.0.0.0-0.255.255.255
@@ -32,6 +39,7 @@ denied-peer-ip=192.168.0.0-192.168.255.255
 denied-peer-ip=198.18.0.0-198.19.255.255
 denied-peer-ip=198.51.100.0-198.51.100.255
 denied-peer-ip=203.0.113.0-203.0.113.255
+denied-peer-ip=224.0.0.0-239.255.255.255
 denied-peer-ip=240.0.0.0-255.255.255.255
 # IPv6 reserved ranges (relay is v4-only here, listed defensively)
 denied-peer-ip=::1

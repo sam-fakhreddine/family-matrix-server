@@ -108,7 +108,7 @@ installs a patched docker profile **only if the test fails**.
 
 ```bash
 docker compose up -d
-curl http://localhost:8008/health                                  # 200
+curl http://192.168.1.10:8008/health                               # 200 (LAN_HOST_IP — admin ports don't bind localhost)
 curl https://matrix.example.com/health                             # 200 via tunnel
 curl https://rtc.example.com/healthz                               # 200
 curl -s https://matrix.example.com/.well-known/matrix/client       # contains rtc_foci

@@ -13,6 +13,7 @@ services:
     user: "991:991"
     security_opt:
       - no-new-privileges:true
+    cap_drop: [ALL]
     environment:
       - SYNAPSE_CONFIG_PATH=/data/homeserver.yaml
     volumes:
@@ -20,12 +21,16 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # LAN-only admin API path (public /_synapse is blocked at Traefik below)
+    # LAN-only admin API path (public /_synapse is blocked at Traefik below).
+    # Bound to the host's LAN address only — never 0.0.0.0: docker-published
+    # ports bypass ufw/firewalld, and the host may have other interfaces
+    # (VPN, second NIC) this must not listen on.
     ports:
-      - "8008:8008"
+      - "${LAN_HOST_IP}:8008:8008"
     networks:
       - traefik-net
       - default
+      - db-net
     labels:
       - traefik.enable=true
       - traefik.docker.network=${TRAEFIK_NETWORK}
@@ -66,23 +71,33 @@ services:
 
   # Admin web panel — LAN-only by design; deliberately NOT exposed via Traefik.
   # Reach it at http://<LAN_HOST_IP>:8082
+  # It is a static SPA: all API calls happen in YOUR browser, so the container
+  # itself needs no route to synapse or postgres — it sits alone on admin-net.
   synapse-admin:
     image: awesometechnologies/synapse-admin:0.11.4
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    # nginx-based image: master runs as root, workers drop privileges
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID, NET_BIND_SERVICE]
     ports:
-      - "8082:80"
+      - "${LAN_HOST_IP}:8082:80"
     volumes:
       - ./synapse-admin-config.json:/app/config.json:ro
     networks:
-      - default
+      - admin-net
 
   db:
     image: docker.io/postgres:18.4-alpine
     restart: unless-stopped
+    # Run postgres directly as its own uid — skips the root init/su-exec dance
+    # entirely, so every capability can be dropped. ./schemas is chowned to
+    # 70:70 by setup.sh.
+    user: "70:70"
     security_opt:
       - no-new-privileges:true
+    cap_drop: [ALL]
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -96,7 +111,15 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - ./schemas:/var/lib/postgresql/data
+      # postgres 18 images moved the volume: mount /var/lib/postgresql (the
+      # data lands in a 18/docker subdirectory). Mounting the pre-18 path
+      # /var/lib/postgresql/data makes the container REFUSE TO START and
+      # would otherwise strand data in an anonymous volume.
+      - ./schemas:/var/lib/postgresql
+    networks:
+      # internal-only network shared with synapse: postgres has no route to
+      # the internet and nothing but synapse has a route to postgres.
+      - db-net
 
   # ── VoIP (Element Call / MatrixRTC + legacy TURN) ─────────────────────────
 
@@ -109,6 +132,11 @@ services:
     command: --config /etc/livekit.yaml
     security_opt:
       - no-new-privileges:true
+    cap_drop: [ALL]
+    environment:
+      # API secret injected via env so livekit.yaml holds no secrets
+      # (LIVEKIT_KEYS is merged over the config file by livekit-server).
+      - "LIVEKIT_KEYS=lkjwt: ${LIVEKIT_API_SECRET}"
     volumes:
       - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
     networks:
@@ -137,6 +165,7 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    cap_drop: [ALL]
     environment:
       # returned verbatim to clients — must be the public wss URL
       - LIVEKIT_URL=wss://${LIVEKIT_HOST}
@@ -165,6 +194,10 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    # NET_BIND_SERVICE must stay: the turnserver binary carries that file
+    # capability, and exec fails outright if it is not in the bounding set.
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
     volumes:
       - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
     networks:
@@ -184,6 +217,7 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    cap_drop: [ALL]
     environment:
       - CLOUDFLARE_API_TOKEN=${CF_DNS_API_TOKEN}
       - DOMAINS=${TURN_HOST}
@@ -196,6 +230,13 @@ networks:
   traefik-net:
     external: true
     name: ${TRAEFIK_NETWORK}
+  # synapse <-> postgres only; internal = no gateway, so postgres can never
+  # reach (or be reached from) anything outside this network.
+  db-net:
+    internal: true
+  # synapse-admin sits alone here: a compromised admin-UI container gets no
+  # path to postgres, synapse, or the media containers.
+  admin-net: {}
   # Gives media containers their own IPs on the physical LAN. The block must
   # be outside your DHCP pool. NOTE: the docker host itself cannot reach
   # macvlan IPs (kernel isolation) — test from another LAN device.

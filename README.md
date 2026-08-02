@@ -14,6 +14,11 @@ Android, web, desktop). Nothing custom to install on phones.
 - **Closed server**: no federation, no public registration, admin plane
   LAN-only, `/_synapse` blocked at the proxy, E2EE on by default. The attack
   surface is the client API plus two narrowly-forwarded media ports.
+- **Least-privilege by default**: every container drops all Linux
+  capabilities it doesn't need, postgres/synapse run as unprivileged uids,
+  postgres has no internet route, admin ports bind to the LAN address only,
+  and Traefik talks to docker through a read-only socket proxy. Details and
+  threat model: [SECURITY.md](SECURITY.md).
 - **Calls that actually work**: Element Call/LiveKit wired correctly for a
   home network — including the non-obvious parts (the openid exception a
   closed server needs for call auth, single-port UDP media mux, macvlan IPs
@@ -77,6 +82,7 @@ user, and sign in from Element. Full walkthrough: **[SETUP.md](SETUP.md)**.
 | [SETUP.md](SETUP.md) | Step-by-step first deployment |
 | [OPERATIONS.md](OPERATIONS.md) | Day-2: users, backups/restore, troubleshooting |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Diagrams, network design, and the reasoning behind the decisions |
+| [SECURITY.md](SECURITY.md) | Threat model, hardening inventory, verification checklist |
 | [ingress/README.md](ingress/README.md) | Bundled Traefik + Cloudflare Tunnel setup |
 
 ## License

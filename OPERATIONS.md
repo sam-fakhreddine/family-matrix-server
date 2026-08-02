@@ -23,14 +23,16 @@ u=$(( $(date +%s) + 3600 )); p=$(printf '%s' "$u" | openssl dgst -sha1 -hmac "$T
 
 | Path | Owner | Notes |
 |---|---|---|
-| `.env` | you | The identity + secret source of truth. Secrets are ALSO rendered as literals into the configs below — after changing one, `./setup.sh --force` + restart the affected service. |
+| `.env` | you (mode 600) | The identity + secret source of truth. Most secrets are ALSO rendered as literals into the configs below — after changing one, `./setup.sh --force` + restart the affected service. |
 | `files/` (homeserver.yaml, signing key, media) | **uid 991** | Synapse runs non-root as 991. Edit via `docker run --rm -v ./files:/f alpine sh -c '...'` — never chown the tree to yourself. `homeserver.yaml` is mode 600. |
-| `schemas/` | uid 70 | Postgres data. Never touch. |
-| `coturn/turnserver.conf` | you | Embeds your **WAN IP** — re-render on IP change and update the TURN A record. |
-| `livekit/livekit.yaml` | you | `interfaces.includes: [eth0]` assumes the macvlan attach is eth0 in-container; verify with `docker exec family-matrix-livekit-1 cat /proc/net/route` if calls won't establish. |
+| `schemas/` | uid 70 | Postgres data (postgres-18 layout: DB lives in `schemas/18/docker/`). Never touch. |
+| `coturn/turnserver.conf` | **uid 65534** (mode 400) | Embeds `TURN_STATIC_SECRET` + your **WAN IP** — locked to the coturn container's uid. Don't hand-edit: change `.env`, `./setup.sh --force`, restart coturn. Re-render on IP change and update the TURN A record. |
+| `livekit/livekit.yaml` | you | Contains **no secrets** (the API key rides the `LIVEKIT_KEYS` env var). `interfaces.includes: [eth0]` assumes the macvlan attach is eth0 in-container; verify with `docker exec family-matrix-livekit-1 cat /proc/net/route` if calls won't establish. |
 
 **Rotating a secret** = edit it in `.env` (or blank it and let setup regenerate)
-→ `./setup.sh --force` → restart the services that consume it. Note rotating
+→ `./setup.sh --force` → restart the services that consume it. Exceptions:
+`LIVEKIT_API_SECRET` is env-injected, not rendered — just
+`docker compose up -d livekit lk-jwt` after editing. Note rotating
 `SYNAPSE_MACAROON_KEY` logs every user out (passwords unaffected).
 
 ## Backups and restore
@@ -60,6 +62,7 @@ docker compose start synapse
 
 | Symptom | Check / fix |
 |---|---|
+| db container exits immediately; logs mention "PostgreSQL data in … unused mount/volume" or `pg_ctlcluster` | The postgres-18 image stores data under `/var/lib/postgresql` (compose mounts `./schemas` there). If you're upgrading a deployment created when this template ran postgres 17 (`./schemas` has `PG_VERSION` at its top level), that's pre-18 data: dump with the old image, then restore into a fresh `schemas/` — or run `pg_upgrade`. See the postgres image docs. |
 | Calls fail: "unable to create room on SFU" | `docker compose logs lk-jwt`. If DNS lookup errors: local resolver negative-cached a hostname — flush it. If 404s verifying tokens: the `openid` listener resource or `serve_server_wellknown` was removed from homeserver.yaml — restore them (required even though federation is off). |
 | Postgres/nginx containers crash-loop; dmesg shows `apparmor="DENIED" ... family="unix"` | Kernel/AppArmor af_unix regression — `sudo bash host-fixes.sh` (it detects and patches). |
 | Remote callers connect but no media | Trickle-ICE test with ephemeral TURN creds (command above) from a phone on cellular; verify forwards point at `.241`/`.242` (container IPs, not the host) and the TURN record is grey-cloud. |
