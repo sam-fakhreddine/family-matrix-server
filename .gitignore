@@ -13,6 +13,11 @@ schemas/
 *.dump
 *.tar.gz
 
+# Runtime litter
+.backup.lock
+backup.log
+ingress/letsencrypt/
+
 # Anything credential-shaped
 *credentials*
 *.key

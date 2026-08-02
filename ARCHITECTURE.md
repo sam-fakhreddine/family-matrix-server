@@ -104,7 +104,9 @@ flowchart TD
 
 | Network | Members | Purpose |
 |---|---|---|
-| stack-internal bridge | synapse, db, synapse-admin | internal service traffic |
+| stack-internal bridge (`default`) | synapse | outbound egress (push notifications) |
+| `db-net` (**internal**) | synapse, db | synapse ↔ postgres only. No gateway: postgres can never reach the internet, and nothing but synapse can reach postgres. |
+| `admin-net` | synapse-admin | the admin UI is a static SPA (all API calls happen in your browser), so its container gets a route to nothing. |
 | `TRAEFIK_NETWORK` (external) | synapse, lk-jwt, livekit | ingress from traefik/cloudflared |
 | `lanvlan` (macvlan on `MACVLAN_PARENT`) | coturn, livekit | dedicated LAN IPs for media. **The docker host cannot reach these IPs** (kernel isolation) — test from another LAN device. livekit is dual-homed (macvlan for media + traefik network for signaling). |
 
@@ -115,10 +117,11 @@ at the macvlan IPs directly.
 ### Data
 
 - `files/` — synapse config, signing key, media (uid 991). `schemas/` —
-  postgres (uid 70).
+  postgres (uid 70; mounted at `/var/lib/postgresql`, the postgres-18 image
+  layout — data lives in the `18/docker` subdirectory).
 - The `synapse` database is auto-created by postgres env vars.
-- Secrets originate in `.env`; several are rendered as literals into configs
-  (see OPERATIONS.md rotation notes).
+- Secrets originate in `.env` (mode 600); some are rendered as literals into
+  configs, LiveKit's is env-injected (see OPERATIONS.md rotation notes).
 
 ## Key decisions
 
@@ -158,3 +161,10 @@ at the macvlan IPs directly.
    (notably Proxmox) deny af_unix sockets in all containers, crashing
    postgres and nginx. `host-fixes.sh` tests for the regression and installs
    an `abi <abi/3.0>,`-pinned docker-default profile only when affected.
+10. **Least-privilege containers** — every service runs with
+    `no-new-privileges` and `cap_drop: ALL` (plus the minimal `cap_add` the
+    few root-entrypoint images need); synapse and postgres run directly as
+    their service uids (991/70). Admin ports bind to `LAN_HOST_IP`, never
+    `0.0.0.0`. In the bundled ingress, Traefik reads the docker API through a
+    filtered socket proxy (read-only container listing) instead of mounting
+    `docker.sock`. Threat model and verification steps: SECURITY.md.

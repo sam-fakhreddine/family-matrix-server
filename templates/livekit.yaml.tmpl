@@ -18,11 +18,11 @@ rtc:
     includes: [eth0]
 room:
   auto_create: false      # only the call-auth service creates rooms
-# Secret below is a literal copy of LIVEKIT_API_SECRET from .env (this file
-# does not support env expansion). Rotate via ./setup.sh --force.
-keys:
-  lkjwt: "${LIVEKIT_API_SECRET}"
-prometheus:
-  port: 6789
+# NO keys block here on purpose: the API secret is injected as the
+# LIVEKIT_KEYS environment variable in docker-compose.yml, so this file
+# contains no secrets. Rotate by editing .env and recreating the container.
+# NO prometheus block either: the metrics listener would be reachable,
+# unauthenticated, on the container's LAN IP. Re-add it only together with a
+# scraper and a firewall rule.
 logging:
   level: info

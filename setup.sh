@@ -21,8 +21,10 @@ command -v envsubst >/dev/null      || die "envsubst is required (package: gette
 # ── 1. Load .env ────────────────────────────────────────────────────────────
 if [ ! -f .env ]; then
   cp .env.example .env
+  chmod 600 .env
   die ".env created from .env.example — edit the Identity/Network sections, then re-run ./setup.sh"
 fi
+chmod 600 .env   # holds every secret — owner-only, enforced on every run
 set -a; . ./.env; set +a
 
 for v in DOMAIN MATRIX_HOST RTC_HOST LIVEKIT_HOST TURN_HOST LAN_HOST_IP \
@@ -58,6 +60,11 @@ set -a; . ./.env; set +a
 
 # ── 4. Directories ──────────────────────────────────────────────────────────
 mkdir -p files coturn livekit schemas
+# postgres runs as uid 70 with every capability dropped — it cannot chown its
+# own data dir, so hand the mount point over here (initdb owns the rest).
+if [ "$(stat -c %u schemas)" != "70" ]; then
+  docker run --rm -v "$(pwd)/schemas:/s" alpine chown 70:70 /s
+fi
 
 # ── 5. Synapse signing key (once, via synapse's own generator) ──────────────
 if [ ! -f "files/${MATRIX_HOST}.signing.key" ]; then
@@ -69,7 +76,9 @@ if [ ! -f "files/${MATRIX_HOST}.signing.key" ]; then
 fi
 
 # ── 6. Render templates ─────────────────────────────────────────────────────
-VARS='${MATRIX_HOST} ${RTC_HOST} ${LIVEKIT_HOST} ${TURN_HOST} ${WAN_IP} ${LAN_HOST_IP} ${COTURN_IP} ${LIVEKIT_IP} ${POSTGRES_USER} ${POSTGRES_DB} ${POSTGRES_PASSWORD} ${TURN_STATIC_SECRET} ${LIVEKIT_API_SECRET} ${SYNAPSE_REGISTRATION_SECRET} ${SYNAPSE_MACAROON_KEY} ${SYNAPSE_FORM_SECRET}'
+# (LIVEKIT_API_SECRET is intentionally absent: it reaches livekit via the
+# LIVEKIT_KEYS env var in docker-compose.yml, never a rendered file.)
+VARS='${MATRIX_HOST} ${RTC_HOST} ${LIVEKIT_HOST} ${TURN_HOST} ${WAN_IP} ${LAN_HOST_IP} ${COTURN_IP} ${LIVEKIT_IP} ${POSTGRES_USER} ${POSTGRES_DB} ${POSTGRES_PASSWORD} ${TURN_STATIC_SECRET} ${SYNAPSE_REGISTRATION_SECRET} ${SYNAPSE_MACAROON_KEY} ${SYNAPSE_FORM_SECRET}'
 render() { # render <template> <dest>
   if [ -f "$2" ] && [ "$FORCE" -ne 1 ] && [ "$2" != "files/.homeserver.rendered" ]; then
     printf '  keep    %s (use --force to re-render)\n' "$2"; return 0
@@ -78,9 +87,22 @@ render() { # render <template> <dest>
   printf '  rendered %s\n' "$2"
 }
 say "Rendering configs"
-render templates/turnserver.conf.tmpl          coturn/turnserver.conf
 render templates/livekit.yaml.tmpl             livekit/livekit.yaml
 render templates/synapse-admin-config.json.tmpl synapse-admin-config.json
+
+# turnserver.conf embeds TURN_STATIC_SECRET, and coturn runs as uid 65534
+# with all caps dropped — install it owned by that uid, mode 400, so the
+# container can read it but other host users cannot.
+if [ ! -f coturn/turnserver.conf ] || [ "$FORCE" -eq 1 ]; then
+  tmp=$(mktemp)
+  envsubst "$VARS" < templates/turnserver.conf.tmpl > "$tmp"
+  docker run --rm -v "$(pwd)/coturn:/c" -v "$tmp:/src:ro" alpine \
+    sh -c 'cp /src /c/turnserver.conf && chown 65534:65534 /c/turnserver.conf && chmod 400 /c/turnserver.conf'
+  rm -f "$tmp"
+  printf '  rendered coturn/turnserver.conf (owner 65534, mode 400)\n'
+else
+  printf '  keep    coturn/turnserver.conf (use --force to re-render)\n'
+fi
 
 # homeserver.yaml lives in files/ which is owned by uid 991 — render to a
 # temp file, then install with correct ownership via a throwaway container.
@@ -138,7 +160,8 @@ cat <<CHECKLIST
 
   Launch:
     docker compose up -d
-    curl http://localhost:8008/health        # expect 200 (may take ~30s first boot)
+    curl http://${LAN_HOST_IP}:8008/health   # expect 200 (may take ~30s first boot)
+    (admin ports bind to ${LAN_HOST_IP} only — localhost will NOT answer)
 
   First (admin) user:
     docker exec -it family-matrix-synapse-1 register_new_matrix_user -c /data/homeserver.yaml http://localhost:8008

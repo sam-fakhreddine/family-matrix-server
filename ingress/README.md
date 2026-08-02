@@ -42,3 +42,9 @@ re-run `../setup.sh` to finish the database bootstrap.
   Cloudflare's edge, and traefik still serves real Let's Encrypt certs.
 - Nothing in this stack publishes ports 80/443 to the host — the only path in
   is the tunnel. Keep it that way.
+- Traefik never mounts `docker.sock`. It discovers services through the
+  `socket-proxy` container, which allows only the read-only endpoints
+  discovery needs (ping/version/container list/events) over an internal
+  network — an exploited Traefik can enumerate containers but cannot exec,
+  start, or create anything. Don't widen socket-proxy's `-allowGET` list
+  (and especially don't add `-allowPOST`) without a concrete need.

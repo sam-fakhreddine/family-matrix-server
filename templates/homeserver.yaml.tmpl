@@ -11,6 +11,11 @@ listeners:
     tls: false
     type: http
     x_forwarded: true
+    # Explicit v4-only bind. In-container only — host exposure is governed by
+    # the compose port mapping (LAN_HOST_IP). The synapse default ['::','0.0.0.0']
+    # crash-loops on hosts with IPv6 disabled; traefik and the LAN mapping
+    # both reach this container over IPv4.
+    bind_addresses: ['0.0.0.0']
     resources:
       # client + openid ONLY — no federation resource, the federation API is
       # not served. openid is required: the call-auth service (lk-jwt)
@@ -50,6 +55,17 @@ federation_domain_whitelist: []
 trusted_key_servers: []
 encryption_enabled_by_default_for_room_type: all
 max_upload_size: 50M
+# URL previews are an SSRF vector (the server fetches attacker-chosen URLs
+# from inside the LAN). Off is the synapse default — pinned here so it
+# survives config refactors. Element renders link previews fine without it.
+url_preview_enabled: false
+# Don't serve profile data (display name / avatar) to unauthenticated
+# requests, and only to users who share a room — no directory scraping.
+require_auth_for_profile_requests: true
+limit_profile_requests_to_users_who_share_rooms: true
+# A device untouched for a year is a lost/forgotten phone still holding a
+# valid access token — expire it. The user just signs in again.
+delete_stale_devices_after: 1y
 
 # ── Calls: Element Call (MatrixRTC) ─────────────────────────────────────────
 # serve_server_wellknown publishes {"m.server": "<server_name>:443"} — the
