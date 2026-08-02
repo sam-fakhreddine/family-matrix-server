@@ -49,6 +49,13 @@ keep these invariants:
   ownership/install steps are pinned to the minor release — they execute
   only `cp`/`chown`/`chmod` and never stay running.
 
+**Metadata**
+- No access logs (synapse per-request, traefik, livekit participant events all
+  off); container logs capped at 1 MB with one rotation; synapse's device
+  IP/user-agent table expires after 1 day. The server is deliberately a poor
+  source of "who talked to whom, from where" — including to whoever ends up
+  holding the disk.
+
 **Network**
 - Admin ports bind to `${LAN_HOST_IP}`, never `0.0.0.0` — docker-published
   ports bypass ufw/firewalld, and the host may have interfaces (VPN, second

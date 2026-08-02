@@ -89,6 +89,33 @@ docker compose start synapse
   modern hardware. Your uplink saturates first; see the sizing table in the
   README.
 
+## Logging (quiet by default)
+
+Nothing here keeps a routine record of who used the server, when, or from
+where:
+
+| Source | Default | What it would otherwise record |
+|---|---|---|
+| synapse `log.config` | root `WARNING`, access logger `ERROR` | client IP + user agent + URI, every request |
+| synapse `user_ips_max_age` | `1d` (default 28d) | per-device last-seen IP/user-agent **in the database** — outlives log rotation |
+| traefik | `--accesslog=false`, `--log.level=WARN` | client IP + full URI for every service |
+| livekit | `level: warn` | every participant join/leave with identity |
+| container logs | `local` driver, 1 MB, 1 file | unbounded stdout retained forever under `/var/lib/docker` |
+
+**To debug**, raise the relevant one, reproduce, then put it back:
+
+```bash
+# synapse: files/<MATRIX_HOST>.log.config -> root level: INFO (edit as uid 991)
+docker compose restart synapse
+# livekit: livekit/livekit.yaml -> level: info|debug
+docker compose restart livekit
+# ICE/candidate detail for call problems lives at livekit debug level
+```
+
+For a server that keeps nothing at all, set the `x-logging` driver in
+`docker-compose.yml` to `none` — you also lose the ability to see why a
+container crashed, so know what you're trading.
+
 ## Update policy
 
 Images are version-pinned on purpose. The internet-listening services

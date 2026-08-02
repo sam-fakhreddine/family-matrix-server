@@ -6,6 +6,18 @@
 #   docker compose --env-file ../.env up -d
 name: family-matrix-ingress
 
+# Container logs are capped and rotate away: enough to see why something
+# crashed, never a growing record of who used the server and from where.
+# Debugging? `docker compose logs -f <svc>` still works within the cap.
+# Want none at all: change driver to "none" (you lose crash diagnosis too).
+x-logging: &logging
+  logging:
+    driver: local
+    options:
+      max-size: "1m"
+      max-file: "1"
+
+
 services:
   # Filtered docker API gateway. Traefik needs the docker API for service
   # discovery, but a raw docker.sock mount hands any RCE in the proxy
@@ -16,12 +28,13 @@ services:
   socket-proxy:
     image: docker.io/wollomatic/socket-proxy:1.12.3
     restart: unless-stopped
+    <<: *logging
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
     user: "0:0" # must read docker.sock; the allowlist below is the boundary
     command:
-      - -loglevel=info
+      - -loglevel=warn  # still logs blocked requests
       - -listenip=0.0.0.0
       - -allowfrom=traefik # only the traefik container may even connect
       - -allowHEAD=/_ping
@@ -40,6 +53,7 @@ services:
   traefik:
     image: docker.io/traefik:v3.7
     restart: unless-stopped
+    <<: *logging
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
@@ -58,6 +72,11 @@ services:
       - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
       - --certificatesresolvers.cloudflare.acme.storage=/letsencrypt/acme.json
       - --global.sendanonymoususage=false
+      # No access log: it would record client IP + full URI for every request
+      # to every service. (Off is traefik's default — stated here so nobody
+      # turns it on without meaning to.)
+      - --accesslog=false
+      - --log.level=WARN
     environment:
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
     volumes:
@@ -74,6 +93,7 @@ services:
   cloudflared:
     image: docker.io/cloudflare/cloudflared:2026.7.3
     restart: unless-stopped
+    <<: *logging
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL] # distroless, runs as 65532, outbound-only

@@ -109,10 +109,13 @@ fi
 if [ ! -f files/.setup-rendered ] || [ "$FORCE" -eq 1 ]; then
   tmp=$(mktemp)
   envsubst "$VARS" < templates/homeserver.yaml.tmpl > "$tmp"
-  docker run --rm -v "$(pwd)/files:/f" -v "$tmp:/src:ro" docker.io/alpine:3.24 \
-    sh -c 'cp /src /f/homeserver.yaml && chown -R 991:991 /f && chmod 600 /f/homeserver.yaml && touch /f/.setup-rendered'
+  tmplog=$(mktemp)
+  envsubst "$VARS" < templates/log.config.tmpl > "$tmplog"
+  docker run --rm -v "$(pwd)/files:/f" -v "$tmp:/src:ro" -v "$tmplog:/srclog:ro" docker.io/alpine:3.24 \
+    sh -c "cp /src /f/homeserver.yaml && cp /srclog '/f/${MATRIX_HOST}.log.config' && chown -R 991:991 /f && chmod 600 /f/homeserver.yaml && touch /f/.setup-rendered"
+  rm -f "$tmplog"
   rm -f "$tmp"
-  printf '  rendered files/homeserver.yaml (owner 991, mode 600)\n'
+  printf '  rendered files/homeserver.yaml + log.config (owner 991)\n'
 else
   printf '  keep    files/homeserver.yaml (use --force to re-render)\n'
 fi

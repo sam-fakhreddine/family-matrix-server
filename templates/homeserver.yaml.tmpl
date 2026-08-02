@@ -66,6 +66,10 @@ limit_profile_requests_to_users_who_share_rooms: true
 # A device untouched for a year is a lost/forgotten phone still holding a
 # valid access token — expire it. The user just signs in again.
 delete_stale_devices_after: 1y
+# Synapse records each device's last-seen IP/user-agent in the database
+# (default 28d). This is the metadata trail that outlives log rotation —
+# keep the minimum the client API needs.
+user_ips_max_age: 1d
 
 # ── Calls: Element Call (MatrixRTC) ─────────────────────────────────────────
 # serve_server_wellknown publishes {"m.server": "<server_name>:443"} — the

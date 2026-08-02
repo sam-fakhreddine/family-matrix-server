@@ -1,0 +1,38 @@
+# Synapse logging — quiet by default (rendered by setup.sh).
+#
+# Synapse's stock config logs every HTTP request at INFO, including the
+# client IP, user agent and full URI. On a family server that's a standing
+# record of who talked to whom, from where, on what device. This config keeps
+# only what you need to know something is broken.
+#
+# To debug: change `level: WARNING` to INFO (or DEBUG) below and restart
+# synapse. Remember to change it back.
+version: 1
+
+formatters:
+  precise:
+    format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: precise
+
+loggers:
+  # Per-request access log: client IP + user agent + URI on every call.
+  # ERROR silences the routine lines but keeps genuine failures.
+  synapse.access.http.8008:
+    level: ERROR
+  # Chatty subsystems that reveal room/user activity patterns.
+  synapse.storage.SQL:
+    level: WARNING
+  synapse.util.caches.lrucache:
+    level: WARNING
+  synapse.metrics:
+    level: WARNING
+
+root:
+  level: WARNING
+  handlers: [console]
+
+disable_existing_loggers: false

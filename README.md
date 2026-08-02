@@ -31,6 +31,13 @@ Android, web, desktop). Nothing custom to install on phones.
   (bundled optional ingress); only 4 UDP/TCP media forwards touch your router.
 - **Everything parameterized**: one `.env` + `./setup.sh` renders all configs
   and generates all secrets. No hand-editing YAML to deploy.
+- **Quiet by default**: no access logs anywhere. Synapse's per-request log
+  (client IP + user agent + URI on every call), Traefik's access log and
+  LiveKit's per-participant lines are all off; container logs are capped at
+  1 MB and rotate away; the device IP/user-agent table synapse keeps in the
+  database expires after a day instead of a month. You still get warnings and
+  errors — see [OPERATIONS.md](OPERATIONS.md) to turn verbosity up while
+  debugging.
 
 ## Requirements
 

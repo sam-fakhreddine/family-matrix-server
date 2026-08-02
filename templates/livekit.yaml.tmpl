@@ -25,4 +25,6 @@ room:
 # unauthenticated, on the container's LAN IP. Re-add it only together with a
 # scraper and a firewall rule.
 logging:
-  level: info
+  # info logs every participant join/leave with identity — warn keeps only
+  # problems. Raise to info/debug when diagnosing calls, then lower it back.
+  level: warn
