@@ -13,7 +13,8 @@ Android, web, desktop). Nothing custom to install on phones.
 
 - **Closed server**: no federation, no public registration, admin plane
   LAN-only, `/_synapse` blocked at the proxy, E2EE on by default. The attack
-  surface is the client API plus two narrowly-forwarded media ports.
+  surface is the client API plus four media port-forwards, and those land on
+  two dedicated container IPs — never on the docker host.
 - **Least-privilege by default**: every container runs with
   `no-new-privileges` and all Linux capabilities dropped (only coturn and
   Traefik add one back, to bind low ports); synapse and postgres run as their
@@ -70,7 +71,8 @@ a 5-person call with remote members costs the server ~12–18 Mbps of egress
 (simulcast gracefully degrades tiles to 360p before anything fails). Storage
 growth is dominated by shared photos/videos, not messages — budget roughly
 25–30 GB/year for an active family and see OPERATIONS.md for the retention
-valve. On 4 GB hosts set `SYNAPSE_CACHE_FACTOR=0.25`.
+valve. On 4 GB hosts add `SYNAPSE_CACHE_FACTOR=0.25` to the synapse service's
+`environment:` in `docker-compose.yml`.
 
 ## Quick start
 
