@@ -63,7 +63,7 @@ mkdir -p files coturn livekit schemas
 # postgres runs as uid 70 with every capability dropped — it cannot chown its
 # own data dir, so hand the mount point over here (initdb owns the rest).
 if [ "$(stat -c %u schemas)" != "70" ]; then
-  docker run --rm -v "$(pwd)/schemas:/s" alpine chown 70:70 /s
+  docker run --rm -v "$(pwd)/schemas:/s" docker.io/alpine:3.24 chown 70:70 /s
 fi
 
 # ── 5. Synapse signing key (once, via synapse's own generator) ──────────────
@@ -96,7 +96,7 @@ render templates/synapse-admin-config.json.tmpl synapse-admin-config.json
 if [ ! -f coturn/turnserver.conf ] || [ "$FORCE" -eq 1 ]; then
   tmp=$(mktemp)
   envsubst "$VARS" < templates/turnserver.conf.tmpl > "$tmp"
-  docker run --rm -v "$(pwd)/coturn:/c" -v "$tmp:/src:ro" alpine \
+  docker run --rm -v "$(pwd)/coturn:/c" -v "$tmp:/src:ro" docker.io/alpine:3.24 \
     sh -c 'cp /src /c/turnserver.conf && chown 65534:65534 /c/turnserver.conf && chmod 400 /c/turnserver.conf'
   rm -f "$tmp"
   printf '  rendered coturn/turnserver.conf (owner 65534, mode 400)\n'
@@ -109,7 +109,7 @@ fi
 if [ ! -f files/.setup-rendered ] || [ "$FORCE" -eq 1 ]; then
   tmp=$(mktemp)
   envsubst "$VARS" < templates/homeserver.yaml.tmpl > "$tmp"
-  docker run --rm -v "$(pwd)/files:/f" -v "$tmp:/src:ro" alpine \
+  docker run --rm -v "$(pwd)/files:/f" -v "$tmp:/src:ro" docker.io/alpine:3.24 \
     sh -c 'cp /src /f/homeserver.yaml && chown -R 991:991 /f && chmod 600 /f/homeserver.yaml && touch /f/.setup-rendered'
   rm -f "$tmp"
   printf '  rendered files/homeserver.yaml (owner 991, mode 600)\n'

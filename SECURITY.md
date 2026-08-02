@@ -43,8 +43,11 @@ keep these invariants:
   traefik (`NET_BIND_SERVICE`).
 - synapse runs as uid 991 and postgres as uid 70 directly (`user:` in
   compose) — no in-container root at any point in their lifecycle.
-- Every image is version-pinned (Renovate keeps them current; apply
-  security releases per the OPERATIONS.md update policy).
+- Every long-running service image is version-pinned (Renovate keeps them
+  current; apply security releases per the OPERATIONS.md update policy).
+  The throwaway `alpine:3.24` helpers setup.sh runs for file
+  ownership/install steps are pinned to the minor release — they execute
+  only `cp`/`chown`/`chmod` and never stay running.
 
 **Network**
 - Admin ports bind to `${LAN_HOST_IP}`, never `0.0.0.0` — docker-published

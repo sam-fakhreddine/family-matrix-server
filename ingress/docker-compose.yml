@@ -25,7 +25,10 @@ services:
       - -listenip=0.0.0.0
       - -allowfrom=traefik # only the traefik container may even connect
       - -allowHEAD=/_ping
-      - -allowGET=(/_ping|/v1\..{1,3}/(version|containers/.*|events.*))
+      # containers/json = list, containers/<id>/json = inspect — deliberately
+      # NOT containers/.*, which would also allow GET archive/export/logs
+      # (file exfiltration from any container via a compromised traefik)
+      - -allowGET=(/_ping|/v1\..{1,3}/(version|events.*|containers/json|containers/[a-zA-Z0-9_.-]+/json))
       - -watchdoginterval=600 # exit (and get restarted) if docker.sock vanishes
       - -stoponwatchdog
       - -shutdowngracetime=10
