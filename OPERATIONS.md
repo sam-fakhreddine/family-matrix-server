@@ -89,6 +89,23 @@ docker compose start synapse
   modern hardware. Your uplink saturates first; see the sizing table in the
   README.
 
+## Behaviour settings worth knowing
+
+Set in `templates/homeserver.yaml.tmpl` (re-render with `./setup.sh --force`):
+
+- **`auto_accept_invites`** (on) — invited users are joined automatically, so
+  non-technical family never hunt for an Accept button. New invites only.
+- **`presence`** (off) — no online/last-active broadcasting. Biggest single
+  reduction in phone background activity; turn on if you want green dots.
+- **`server_notices`** (on) — broadcast to everyone:
+  `curl -X POST -H "Authorization: Bearer <ADMIN_TOKEN>" \
+   http://<LAN_HOST_IP>:8008/_synapse/admin/v1/send_server_notice \
+   -d '{"user_id":"@someone:<MATRIX_HOST>","content":{"msgtype":"m.text","body":"Server restarting at 9pm"}}'`
+- **`retention`** (commented out) — purges message history past a cutoff.
+  Irreversible; enable deliberately. It does **not** touch uploaded media,
+  which is usually what fills the disk — that is `media_retention`, and
+  deleting it means deleting your photos.
+
 ## Logging (quiet by default)
 
 Nothing here keeps a routine record of who used the server, when, or from

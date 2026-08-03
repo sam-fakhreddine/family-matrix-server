@@ -95,6 +95,49 @@ rc_delayed_event_mgmt:
   per_second: 1
   burst_count: 20
 
+# ── Family-server quality of life ───────────────────────────────────────────
+# Invited members are joined automatically — nobody has to find and tap
+# "Accept". Applies to NEW invites only. only_from_local_users costs nothing
+# on a closed server but keeps this scoped if you ever enable federation.
+auto_accept_invites:
+  enabled: true
+  only_for_direct_messages: false
+  only_from_local_users: true
+
+# Presence (online/last-active broadcasting) off: it is the main source of
+# background traffic and phone battery drain, and a small group rarely needs
+# it. Set enabled: true if you want the green dots.
+presence:
+  enabled: false
+
+# Server notices: lets the admin broadcast to every user (maintenance windows
+# etc.) from a dedicated @notices account, created on first use via
+# POST /_synapse/admin/v1/send_server_notice with an admin token.
+server_notices:
+  system_mxid_localpart: notices
+  system_mxid_display_name: "Server Notices"
+  room_name: "Server Notices"
+  room_topic: "Announcements from the server admin"
+  auto_join: true
+
+# Message retention — OFF by default because it is irreversible data loss and
+# should be a deliberate choice. Uncomment to purge local room history older
+# than max_lifetime. NOTE: this removes MESSAGES only; uploaded photos/videos
+# are untouched (see `media_retention` if you want those purged too — think
+# hard first, that is where family pictures live).
+# retention:
+#   enabled: true
+#   default_policy:
+#     min_lifetime: 1d
+#     max_lifetime: 180d
+#   allowed_lifetime_min: 1d
+#   allowed_lifetime_max: 180d
+#   purge_jobs:
+#     - longest_max_lifetime: 3d
+#       interval: 12h
+#     - shortest_max_lifetime: 3d
+#       interval: 1d
+
 # ── Legacy 1:1 TURN (Element Web/Desktop; Element X uses LiveKit) ───────────
 turn_uris:
   - "turn:${TURN_HOST}:3478?transport=udp"
