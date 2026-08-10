@@ -210,7 +210,7 @@ services:
   # Legacy 1:1 call TURN relay (Element Web/Desktop only; Element X uses
   # LiveKit above). Own LAN IP; nothing internal talks to it.
   coturn:
-    image: docker.io/coturn/coturn:4.16.0-r0-alpine
+    image: docker.io/coturn/coturn:4.17.2-r0-alpine
     restart: unless-stopped
     <<: *logging
     security_opt:
