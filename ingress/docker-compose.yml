@@ -26,7 +26,7 @@ services:
   # list/events) and denies everything else — every write method, exec,
   # images, volumes, swarm — by default-deny.
   socket-proxy:
-    image: docker.io/wollomatic/socket-proxy:1.12.3
+    image: docker.io/wollomatic/socket-proxy:1.13.1
     restart: unless-stopped
     <<: *logging
     security_opt:
