@@ -180,7 +180,7 @@ services:
   # traefik network only — lk-jwt is signaling/auth (HTTP), never touches
   # media, so it needs no lanvlan IP unlike livekit/coturn.
   lk-jwt:
-    image: ghcr.io/element-hq/lk-jwt-service:0.5.0
+    image: ghcr.io/element-hq/lk-jwt-service:0.6.0
     restart: unless-stopped
     <<: *logging
     security_opt:
