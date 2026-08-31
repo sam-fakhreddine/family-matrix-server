@@ -91,7 +91,7 @@ services:
   # `tunnel route dns` writes records into whichever zone the cert belongs
   # to — a classic wrong-zone trap on multi-domain accounts.
   cloudflared:
-    image: docker.io/cloudflare/cloudflared:2026.7.3
+    image: docker.io/cloudflare/cloudflared:2026.8.3
     restart: unless-stopped
     <<: *logging
     security_opt:
