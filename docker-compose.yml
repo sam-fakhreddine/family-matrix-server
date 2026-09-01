@@ -145,7 +145,7 @@ services:
   # connect at switch speed, no NAT hairpin), plus the traefik network for wss
   # signaling (signaling rides the tunnel; media never does).
   livekit:
-    image: docker.io/livekit/livekit-server:v1.13.5
+    image: docker.io/livekit/livekit-server:v1.13.6
     restart: unless-stopped
     <<: *logging
     command: --config /etc/livekit.yaml
