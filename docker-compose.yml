@@ -17,7 +17,7 @@ x-logging: &logging
 
 services:
   synapse:
-    image: docker.io/matrixdotorg/synapse:v1.157.2
+    image: docker.io/matrixdotorg/synapse:v1.160.0
     # synapse does not retry the database connection — restart on failure
     restart: unless-stopped
     <<: *logging
