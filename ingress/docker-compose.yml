@@ -51,7 +51,7 @@ services:
       - docker-api
 
   traefik:
-    image: docker.io/traefik:v3.7
+    image: docker.io/traefik:v3.8
     restart: unless-stopped
     <<: *logging
     security_opt:
